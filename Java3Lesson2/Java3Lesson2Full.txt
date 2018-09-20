@@ -1,0 +1,247 @@
+import java.sql.*;
+
+public class AuthService {
+    private static Connection connection;
+    private static Statement stmt;
+
+    public static void connect() {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            connection = DriverManager.getConnection("jdbc:sqlite:users.db");
+            stmt = connection.createStatement();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    //метод смены ника пользователя в базе данных
+    public static void changeNick(String login, String nickname) {
+        try {
+            String query = "UPDATE main SET nickname = '" + nickname + "' WHERE login = '" + login + "'";
+            PreparedStatement ps = connection.prepareStatement(query);
+            ps.executeUpdate();
+            } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //метод добавления пользователя в базу данных
+    public static void addUser(String login, String pass, String nick) {
+        try {
+            int pwd = pass.hashCode();
+            String query = "INSERT INTO main (login,password,nickname)\n" +
+                    "VALUES ('" + login + "', " + pwd + ", '" + nick + "');";
+            createBlForLogin(login);
+            PreparedStatement ps = connection.prepareStatement(query);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //создание блэк-листа для конкретного пользователя
+    public static void createBlForLogin(String login) {
+        try {
+            String bl = "CREATE TABLE bl_" + login + "(\n" +
+                    "    id       INTEGER PRIMARY KEY,\n" +
+                    "    nickname STRING\n" +
+                    ");";
+            PreparedStatement ps = connection.prepareStatement(bl);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //метод добавления пользователя в базу bl_"login пользователя"
+    public static void addNickBl(String login, String nickname) {
+        try {
+            String query = "INSERT INTO bl_" + login + " (nickname)\n" +
+                    "VALUES ('" + nickname + "');";
+            PreparedStatement ps = connection.prepareStatement(query);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //метод удаления пользователя из базы bl_"login пользователя"
+    public static void removeNickBl(String login, String nickname) {
+        try {
+            String query = "DELETE FROM bl_" + login + "\n" +
+                    "WHERE nickname = '" + nickname + "';";
+            PreparedStatement ps = connection.prepareStatement(query);
+            ps.executeUpdate();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    //метод проверки в базе блэк-листа пользователя наличия ника
+    public static boolean getNickBl(String login, String nickname) {
+        try {
+            ResultSet rs = stmt.executeQuery("SELECT nickname FROM bl_" + login + " WHERE nickname = '" + nickname + "'");
+            if (rs.next()) {
+                String dbNickname = rs.getString(1);
+                if (nickname.equals(dbNickname)) {
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
+    }
+
+    public static String getNickByLoginAndPass(String login, String pass) {
+        try {
+            ResultSet rs = stmt.executeQuery("SELECT nickname, password FROM main WHERE login = '" + login + "'");
+            int myHash = pass.hashCode();
+            if (rs.next()) {
+                String nick = rs.getString(1);
+                int dbHash = rs.getInt(2);
+                if (myHash == dbHash) {
+                    return nick;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static void disconnect() {
+        try {
+            connection.close();
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+}
+
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.IOException;
+import java.net.Socket;
+
+public class ClientHandler {
+    private Server server;
+    private Socket socket;
+    private DataOutputStream out;
+    private DataInputStream in;
+    private String nick;
+    private String login;
+
+    public String getNick() {
+        return nick;
+    }
+
+    public String getLogin() {
+        return login;
+    }
+
+    public ClientHandler(Server server, Socket socket) {
+        try {
+            this.socket = socket;
+            this.server = server;
+            this.in = new DataInputStream(socket.getInputStream());
+            this.out = new DataOutputStream(socket.getOutputStream());
+
+            new Thread(() -> {
+                try {
+                    while (true) {
+                        String str = in.readUTF();
+                        if (str.startsWith("/reg")) {
+                            String[] text = str.split(" ");
+                            AuthService.addUser(text[1], text[2], text[3]);
+                        }
+                        if (str.startsWith("/auth")) {
+                            String[] tokens = str.split(" ");
+                            String newNick = AuthService.getNickByLoginAndPass(tokens[1], tokens[2]);
+                            login = tokens[1];
+                            if (newNick != null) {
+                                if (!server.isNickBusy(newNick)) {
+                                    sendMsg("/authok");
+                                    nick = newNick;
+                                    server.subscribe(this);
+                                    break;
+                                } else {
+                                    sendMsg("Учетная запись уже используется");
+                                }
+                            } else {
+                                sendMsg("Неверный логин/пароль");
+                            }
+                        }
+                    }
+                    while (true) {
+                        String str = in.readUTF();
+                        if (str.startsWith("/")) {
+                            if (str.equals("/end")) {
+                                out.writeUTF("/serverclosed");
+                                break;
+                            }
+                            if (str.startsWith("/w ")) {
+                                String[] tokens = str.split(" ", 3);
+                                String m = str.substring(tokens[1].length() + 4);
+                                server.sendPersonalMsg(this, tokens[1], tokens[2]);
+                            }
+                            if (str.startsWith("/changenick ")) { // смена ника пользователя
+                                String[] changeNick = str.split(" ");
+                                AuthService.changeNick(this.login, changeNick[1]);
+                                sendMsg("Вы сменили ник на " + changeNick[1]);
+
+                            }
+                            if (str.startsWith("/blacklistadd ")) { // добавление пользователя в блэк-лист
+                                String[] nickToBl = str.split(" ");
+                                AuthService.addNickBl(login, nickToBl[1]);
+                                sendMsg("Вы добавили пользователя " + nickToBl[1] + " в черный список");
+                            }
+                            if (str.startsWith("/blacklistremove ")) { // удаление пользователя из блэк-листа
+                                String[] nickToBl = str.split(" ");
+                                AuthService.removeNickBl(login, nickToBl[1]);
+                                sendMsg("Вы удалили пользователя " + nickToBl[1] + " из черного списка");
+                            }
+                        } else {
+                            server.broadcastMsg(this, nick + ": " + str);
+                        }
+                        System.out.println("Client: " + str);
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } finally {
+                    try {
+                        in.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    try {
+                        out.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    try {
+                        socket.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                    server.unsubscribe(this);
+                }
+            }).start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    //проверка на наличие ника в блэк-листе пользователя
+    public boolean checkBlackList(String nick) {
+        return AuthService.getNickBl(this.login, nick);
+    }
+
+    public void sendMsg(String msg) {
+        try {
+            out.writeUTF(msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+}
