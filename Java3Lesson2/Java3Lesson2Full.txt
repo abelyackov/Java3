@@ -1,3 +1,5 @@
+package ru.geekbrains.chat.server;
+
 import java.sql.*;
 
 public class AuthService {
@@ -20,9 +22,25 @@ public class AuthService {
             String query = "UPDATE main SET nickname = '" + nickname + "' WHERE login = '" + login + "'";
             PreparedStatement ps = connection.prepareStatement(query);
             ps.executeUpdate();
-            } catch (SQLException e) {
+        } catch (SQLException e) {
             e.printStackTrace();
         }
+    }
+
+    //метод проверки ника в базе
+    public static boolean checkNick(String nickname) {
+        try {
+            ResultSet rs = stmt.executeQuery("SELECT nickname FROM main WHERE nickname = '" + nickname + "'");
+            if (rs.next()) {
+                String dbNickname = rs.getString(1);
+                if (nickname.equals(dbNickname)) {
+                    return true;
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     //метод добавления пользователя в базу данных
@@ -119,6 +137,8 @@ public class AuthService {
     }
 }
 
+package ru.geekbrains.chat.server;
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -187,9 +207,11 @@ public class ClientHandler {
                             }
                             if (str.startsWith("/changenick ")) { // смена ника пользователя
                                 String[] changeNick = str.split(" ");
-                                AuthService.changeNick(this.login, changeNick[1]);
-                                sendMsg("Вы сменили ник на " + changeNick[1]);
-
+                                if (AuthService.checkNick(changeNick[1]) == false) {
+                                    AuthService.changeNick(this.login, changeNick[1]);
+                                    sendMsg("Вы сменили ник на " + changeNick[1]);
+                                }
+                                else sendMsg("Ник " + changeNick[1] + " уже занят.");
                             }
                             if (str.startsWith("/blacklistadd ")) { // добавление пользователя в блэк-лист
                                 String[] nickToBl = str.split(" ");
@@ -245,3 +267,4 @@ public class ClientHandler {
         }
     }
 }
+
