@@ -65,6 +65,7 @@ public class Controller implements Initializable {
     BufferedWriter bufferedWriter;
     String userLogin;
 
+
     final String IP_ADDRESS = "localhost";
     final int PORT = 8189;
 
@@ -113,11 +114,11 @@ public class Controller implements Initializable {
             socket.setSoTimeout(120000); //задаем тайм-аут для соединения в 120 секунд, если неактивен то отключаемся
             in = new DataInputStream(socket.getInputStream());
             out = new DataOutputStream(socket.getOutputStream());
+
             setAuthorized(false);
             Thread thread = new Thread(() -> {
                 try {
-                    fileWriter = new FileWriter(userLogin + "_history.txt");
-                    bufferedWriter = new BufferedWriter(fileWriter);
+
                     while (true) {
                         String str = in.readUTF();
                         if (str.startsWith("/authok")) {
@@ -129,6 +130,7 @@ public class Controller implements Initializable {
                             }
                         }
                     }
+
                     while (true) {
                         String str = in.readUTF();
                         if (str.startsWith("/")) {
@@ -145,15 +147,13 @@ public class Controller implements Initializable {
                         } else {
                             String msg = str + "\n";
                             chatArea.appendText(msg);
-                            bufferedWriter.write(msg);
-                            
+                            writeToFile(msg); // запись сообщения в файл
                         }
                     }
                 } catch (SocketTimeoutException s) { //отлавливаем ошибку разрыва соединения после простоя 120 сек
                     System.out.println("Соединение разорвано, из-за бездействия 120 сек");
                     setAuthorized(false);
                     try {
-                        fileWriter.close();
                         socket.close();
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -162,6 +162,7 @@ public class Controller implements Initializable {
                     e.printStackTrace();
                 } finally {
                     try {
+
                         socket.close();
                     } catch (IOException e) {
                         e.printStackTrace();
@@ -176,6 +177,49 @@ public class Controller implements Initializable {
         }
     }
 
+    //метод создания файла с историей сообщений
+    public void createHistory(String login) {
+        try {
+            String path = login + "_history.txt";
+            history = new File(path);
+            if (!history.exists()) {
+                history.createNewFile();
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    //метод сообщений истории в файл
+    public void writeToFile(String msg) throws IOException {
+        FileWriter fileWriter = new FileWriter(history.getAbsoluteFile(), true);
+        BufferedWriter osw = new BufferedWriter(fileWriter);
+        try {
+            osw.append(msg);
+            osw.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
+    //метод вывода последних 100 сообщений пользователя
+    public void read100Msg(String login) {
+        ArrayList<String> msg = new ArrayList<>();
+        try {
+            FileInputStream fis = new FileInputStream(login + "_history.txt");
+            BufferedReader br = new BufferedReader(new InputStreamReader(fis));
+            String strLine;
+            for (int i = 0; i < 100; i++) {
+                strLine = br.readLine();
+                chatArea.appendText(strLine);
+                chatArea.appendText("\n");
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
 
     public void sendMsg() throws IOException {
         try {
@@ -208,28 +252,13 @@ public class Controller implements Initializable {
         try {
             out.writeUTF("/auth " + loginField.getText() + " " + passwordField.getText());
             createHistory(loginField.getText());
+            read100Msg(loginField.getText());
             userLogin = loginField.getText();
             loginField.clear();
             passwordField.clear();
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    //метод создания файла с историей сообщений
-    public void createHistory(String login) {
-        try {
-            String path = login + "_history.txt";
-            history = new File(path);
-            if (!history.exists()) {
-                history.createNewFile();
-            }
-
-        } catch (IOException e) {
-
-            e.printStackTrace();
-        }
-
     }
 
     public void selectClient(MouseEvent mouseEvent) {
