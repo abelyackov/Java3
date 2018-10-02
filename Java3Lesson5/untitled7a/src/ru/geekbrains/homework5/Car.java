@@ -1,9 +1,8 @@
 package ru.geekbrains.homework5;
 
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.CyclicBarrier;
 
 import static ru.geekbrains.homework5.MainClass.cb;
+import static ru.geekbrains.homework5.MainClass.cd;
 
 public class Car implements Runnable {
     private static int CARS_COUNT;
@@ -38,20 +37,21 @@ public class Car implements Runnable {
             System.out.println(this.name + " готовится");
             Thread.sleep(500 + (int) (Math.random() * 800));
             System.out.println(this.name + " готов");
+            cd.countDown();
             cb.await();
             go();
         } catch (Exception e) {
             e.printStackTrace();
         }finally {
-
+            System.out.println("ВАЖНОЕ ОБЪЯВЛЕНИЕ >>> Гонка закончилась!!!");
         }
-
     }
 
     public void go(){
         for (int i = 0; i < race.getStages().size(); i++) {
             race.getStages().get(i).go(this);
         }
+
     }
 }
 
