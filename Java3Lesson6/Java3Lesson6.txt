@@ -1,0 +1,248 @@
+public class Server {
+    private static final Logger logger = Logger.getLogger(Server.class.getName());
+    private Vector<ClientHandler> clients;
+
+    public Server() {
+        clients = new Vector<>();
+        ServerSocket server = null;
+        Socket socket = null;
+        try {
+            AuthService.connect();
+            server = new ServerSocket(8189);
+            System.out.println("Сервер запущен. Ожидаем клиентов...");
+            setLogger("Сервер запущен. Ожидаем клиентов...");
+            while (true) {
+                socket = server.accept();
+                System.out.println("Клиент подключился");
+                setLogger("Клиент подключился");
+                new ClientHandler(this, socket);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        } finally {
+            try {
+                socket.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            try {
+                server.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+            AuthService.disconnect();
+        }
+    }
+
+    public void sendPersonalMsg(ClientHandler from, String nickTo, String msg) {
+        for (ClientHandler o : clients) {
+            if (o.getNick().equals(nickTo)) {
+                o.sendMsg("личное сообщение от " + from.getNick() + ": " + msg);
+                from.sendMsg("личное сообщение для " + nickTo + ": " + msg);
+                return;
+            }
+        }
+        from.sendMsg("Клиент с ником " + nickTo + " не найден в чате");
+    }
+
+    public void broadcastMsg(ClientHandler from, String msg) {
+        for (ClientHandler o : clients) {
+            if (!o.checkBlackList(from.getNick())) {
+                o.sendMsg(msg);
+                setMessageLogger(msg);
+            }
+        }
+    }
+
+    public boolean isNickBusy(String nick) {
+        for (ClientHandler o : clients) {
+            if (o.getNick().equals(nick)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void broadcastClientsList() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("/clientslist ");
+        for (ClientHandler o : clients) {
+            sb.append(o.getNick() + " ");
+        }
+        String out = sb.toString();
+        for (ClientHandler o : clients) {
+            o.sendMsg(out);
+        }
+    }
+
+    public void subscribe(ClientHandler client) {
+        clients.add(client);
+        broadcastClientsList();
+    }
+
+    public void unsubscribe(ClientHandler client) {
+        clients.remove(client);
+        broadcastClientsList();
+    }
+
+    public void setLogger(String msg) {
+        try {
+            Handler myHandler = new FileHandler("INFO_log.log",true);
+            myHandler.setFormatter(new Formatter() {
+                @Override
+                public String format(LogRecord record) {
+                    return record.getLevel() + ": " + record.getMessage() + "\n";
+                }
+            });
+            logger.addHandler(myHandler);
+            logger.log(Level.INFO, msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    public void setMessageLogger(String msg){
+        try {
+            Handler myHandler = new FileHandler("MSG_log.log", true);
+            myHandler.setFormatter(new Formatter() {
+                @Override
+                public String format(LogRecord record) {
+                    return record.getLevel() + ": " + record.getMessage() + "\n";
+                }
+            });
+            logger.addHandler(myHandler);
+            logger.log(Level.INFO, msg);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+}
+
+package Task2;
+
+import java.util.Arrays;
+
+public class Task2 {
+
+    public int[] array4(int[] myArr, int value) {
+        boolean isValue = false;
+        int position = 0;
+
+        for (int i = 0; i < myArr.length; i++) {
+            if (myArr[i] == value) {
+                isValue = true;
+                position = i;
+            }
+        }
+        if (isValue == false) throw new RuntimeException("В переданном массиве нет значения " + value);
+        int[] newArr = new int[myArr.length - position - 1];
+        for (int j = 0; j < newArr.length; j++) {
+            newArr[j] = myArr[position + 1 + j];
+        }
+        return newArr;
+    }
+
+}
+
+package Task2;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+
+public class Task2Test {
+    private Task2 task2;
+    private int[] arr1 = {1, 2, 4, 5, 6, 4, 2, 2};
+    private int[] arr2 = {1, 2, 5, 6, 4, 2, 2};
+    private int[] arr3 = {1, 2, 5, 4, 6, 2, 2};
+    private int[] arr4 = {4, 4, 4, 4, 4, 4};
+    private int value = 4;
+
+    @Before
+    public void init() {
+        task2 = new Task2();
+    }
+
+
+    @Test(expected = RuntimeException.class)
+    public void testArr1() {
+        task2.array4(arr1, 7);
+    }
+
+    @Test
+    @Ignore("В массивах разные значения элементов")
+    public void testArr2() {
+        Assert.assertArrayEquals(arr2, arr3);
+    }
+
+    @Test
+    public void testArr3() {
+        Assert.assertArrayEquals(task2.array4(arr3, value), new int[]{6, 2, 2});
+    }
+
+    @Test
+    public void testArr4() {
+        task2.array4(arr4, value);
+    }
+}
+
+package Task3;
+
+public class Task3 {
+    int v1 = 1, v2 = 4;
+    int[] arr = {1, 1, 1, 1, 1, 1, 1, 1};
+
+    public boolean is1or4(int[] myArr, int v1, int v2) {
+        int count = 0;
+        for (int i = 0; i < myArr.length; i++) {
+            if (!(myArr[i] == v1 || myArr[i] == v2))
+                throw new RuntimeException("в массиве присутствует элемент отличный от 1 и 4");
+            if (myArr[i] == v1) {
+                count++;
+            }
+        }
+        if (count == myArr.length || count == 0)
+            return false;
+        else return true;
+    }
+}
+
+package Task3;
+
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Ignore;
+import org.junit.Test;
+
+public class Task3Test {
+    private Task3 task3;
+    int[] actArray = {1, 4, 1, 1, 1, 1, 1, 1};
+
+    @Before
+    public void init(){
+        task3 = new Task3();
+    }
+
+    @Test
+    public void testTrueOrFalse() {
+        Assert.assertFalse(task3.is1or4(task3.arr, task3.v1, task3.v2));
+    }
+
+    @Test
+    @Ignore("Игнорируем тест, т.к. массивы разные")
+    public void testArray() {
+        Assert.assertArrayEquals(task3.arr, actArray);
+    }
+
+    @Test
+    public void testActArray(){
+        task3.is1or4(actArray,task3.v1,task3.v2);
+    }
+
+    @Test
+    public void testActArrayFalse(){
+        Assert.assertTrue(task3.is1or4(actArray,task3.v1,task3.v2));
+    }
+}
